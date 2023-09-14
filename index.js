@@ -1,3 +1,10 @@
+const APP_ID = "fedabd13a02c45689800833aa7d9b0ad";
+
+const token = null;
+const uid = String(Math.floor(Math.random() * 1000));
+
+let client;
+let channel;
 let localstream;
 let remotestream;
 let peerConnection;
@@ -10,15 +17,36 @@ var iceServers = {
 };
 
 const init = async () => {
+  client = await AgoraRTM.createInstance(APP_ID);
+  await client.login({ uid, token });
+
+  channel = client.createChannel('main');
+  await channel.join();
+
+  //event listeners for channel obj
+  channel.on('MemberJoined', handleMemJoined)
+
+  //event listener for client
+  client.on('MessageFromPeer', handleMsgFromPeer)
+
   localstream = await navigator.mediaDevices.getUserMedia({
     video: true,
     audio: false,
   });
   document.getElementById("user-1").srcObject = localstream;
-  createOffer();
 };
 
-let createOffer = async () => {
+const handleMsgFromPeer = async(msg,MemeberID)=>{
+  const message = JSON.parse(msg.text)
+  console.log("message from peer", message, MemeberID);
+}
+
+const handleMemJoined = async(MemeberID)=>{
+  console.log("new user joined web channel", MemeberID);
+  createOffer(MemeberID);
+}
+
+let createOffer = async (MemeberID) => {
   peerConnection = new RTCPeerConnection(iceServers);
 
   remotestream = new MediaStream();
@@ -45,7 +73,7 @@ let createOffer = async () => {
   // local desc is the SDP by local to be sent over to remote { for signaling or invitation to accept teh stream}
   await peerConnection.setLocalDescription(offer); // triggers addICeCandidate func
 
-  console.log("offer: ", offer);
+  client.sendMessageToPeer({'text': JSON.stringify({type:"offer", 'offer': offer})},MemeberID)
 };
 
 init();
