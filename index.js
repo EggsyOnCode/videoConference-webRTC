@@ -20,14 +20,14 @@ const init = async () => {
   client = await AgoraRTM.createInstance(APP_ID);
   await client.login({ uid, token });
 
-  channel = client.createChannel('main');
+  channel = client.createChannel("main");
   await channel.join();
 
   //event listeners for channel obj
-  channel.on('MemberJoined', handleMemJoined)
+  channel.on("MemberJoined", handleMemJoined);
 
   //event listener for client
-  client.on('MessageFromPeer', handleMsgFromPeer)
+  client.on("MessageFromPeer", handleMsgFromPeer);
 
   localstream = await navigator.mediaDevices.getUserMedia({
     video: true,
@@ -36,17 +36,22 @@ const init = async () => {
   document.getElementById("user-1").srcObject = localstream;
 };
 
-const handleMsgFromPeer = async(msg,MemeberID)=>{
-  const message = JSON.parse(msg.text)
-  console.log("message from peer", message, MemeberID);
-}
+// this func is written from the perspectiv eof remote peer (peer 2) not the client or the one who init the conversation
+const handleMsgFromPeer = async (msg, MemeberID) => {
+  const message = JSON.parse(msg.text);
+  if (message.type === "offer") {
+    createAnswer(MemeberID, message.offer);
+  } else if (message.type === "answer") {
+    addAnswer(message.answer);
+  }
+};
 
-const handleMemJoined = async(MemeberID)=>{
+const handleMemJoined = async (MemeberID) => {
   console.log("new user joined web channel", MemeberID);
   createOffer(MemeberID);
-}
+};
 
-let createOffer = async (MemeberID) => {
+let createPeerConnection = async () => {
   peerConnection = new RTCPeerConnection(iceServers);
 
   remotestream = new MediaStream();
@@ -59,7 +64,7 @@ let createOffer = async (MemeberID) => {
 
   // this is an event listener ; so when peerconnection receives media streams the event "e" is fired which contaons media data; we fetch tracjs from it and add it to remoteStream obj so taht it maybe dispalyed
   peerConnection.ontrack = (e) => {
-    e.streams[0].getTracks.forEach((track) => {
+    e.streams[0].getTracks().forEach((track) => {
       remotestream.addTrack(track);
     });
   };
@@ -68,12 +73,45 @@ let createOffer = async (MemeberID) => {
   peerConnection.onicecandidate = () => {
     console.log("ice candidates are ", peerConnection.localDescription);
   };
+};
+
+//clinet sending offer to remote Peer
+let createOffer = async (MemeberID) => {
+  await createPeerConnection();
   //local peer creating offer to be sent over to remote peer ;
   let offer = await peerConnection.createOffer();
   // local desc is the SDP by local to be sent over to remote { for signaling or invitation to accept teh stream}
   await peerConnection.setLocalDescription(offer); // triggers addICeCandidate func
 
-  client.sendMessageToPeer({'text': JSON.stringify({type:"offer", 'offer': offer})},MemeberID)
+  client.sendMessageToPeer(
+    { text: JSON.stringify({ type: "offer", offer: offer }) },
+    MemeberID
+  );
+};
+
+//peer 2 responign client with an SDP answer
+let createAnswer = async (MemeberID, offer) => {
+  await createPeerConnection(MemeberID);
+
+  //peer 2 setting its remote desc to offer it recevied from peer 1 or client
+  // question : peerConnection is a single obj; wouldn't this be reinitializing its state ??????
+  await peerConnection.setRemoteDescription(offer);
+
+  let answer = await peerConnection.createAnswer();
+
+  //peer2 setting its' local desc to answer (the SDP it generated)
+  await peerConnection.setLocalDescription(answer);
+  client.sendMessageToPeer(
+    { text: JSON.stringify({ type: "answer", answer: answer }) },
+    MemeberID
+  );
+};
+
+// client setting its remote desc to the answer SDP it received from peer2
+let addAnswer = async (answer) => {
+  if (!peerConnection.currentRemoteDescription) {
+    await peerConnection.setRemoteDescription(answer);
+  }
 };
 
 init();
