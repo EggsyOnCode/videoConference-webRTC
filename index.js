@@ -1,3 +1,5 @@
+const AgoraRTM = require("./agora-rtm-sdk-1.5.1")
+
 const APP_ID = "fedabd13a02c45689800833aa7d9b0ad";
 
 const token = null;
