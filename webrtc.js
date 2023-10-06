@@ -18,6 +18,8 @@ class WebRTC extends EventTarget {
     this.pcConfig = pcConfig; // list of turn and stun servers
     //other field vars
     this.room;
+    //streams refer to audio or video data 
+    this.streams = {};
     this.pc = {}; //peer connections
     this.localStream; //only one stream ; the video feed of a user
     this._id = null; //socket ID of the user
@@ -73,38 +75,94 @@ class WebRTC extends EventTarget {
   }
 
   //getLocal Stream ; this func is triggered from the UI btn ; asks for permission ; setups up the media devices and init the localstream to the received stream
-  //and returns it 
+  //and returns it
   getLocalStream(audioContraints, videoConstraints) {
     return navigator.mediaDevices
       .getUserMedia({ audio: audioContraints, video: videoConstraints })
-      .then((strem) => {
+      .then((stream) => {
         this.localStream = stream;
         return stream;
-      }).catch((err)=>{
-         this._emit("error", {
-           error: new Error(`Can't get usermedia`),
-         });
       })
+      .catch((err) => {
+        this._emit("error", {
+          error: new Error(`Can't get usermedia`),
+        });
+      });
   }
 
   //connection to peers
-  createPeerConnection(socketId){
+  createPeerConnection(socketId) {
     try {
-        if(this.pc[socketId]){
-            console.log("connection already exists; skipping..");
-            return;
-        }
-        this.pc[socketId] = new RTCPeerConnection();
-        //after the connection obj is est we need to start sendning ICE candidates to the remote peer
-        this.pc[socketId].onicecandidate;
-    } catch (err) {
-        
+      if (this.pc[socketId]) {
+        console.log("connection already exists; skipping..");
+        return;
+      }
+      this.pc[socketId] = new RTCPeerConnection();
+      //after the connection obj is est we need to start sending ICE candidates to the remote peer
+      //to be defined : handleICe, handleOnTrack
+      this.pc[socketId].onicecandidate = this.handleICE.bind(this, socketId); //call to handleIceCandidate func
+      //adding tracks to be transferred
+      // onTrack is an event listener for the PC obj; when it's triggered it recevies an event obj which is then passed over to handleOnTrack 
+      //this passing of event obj occurs implicitly ; so we don't need to explicitly pass that
+      this.pc[socketId].onTrack = this.handleOnTrack.bind(this, socketId);
+    } catch (error) {
+      this._emit("error", {
+        error: new Error(`RTCPeerConnection failed: ${error.message}`),
+      });
     }
   }
 
-
-  connect(socketId){
-
+  //sending ICE cand.. to the remote peer
+  handleICE(socketId, event) {
+    if (event.candidate) {
+      this.sendMsg(
+        {
+          type: "candidate",
+          label: event.candidate.sdpMLineIndex,
+          id: event.candidate.sdpMid,
+          candidate: event.candidate.candidate,
+        },
+        socketId
+      );
+    }
   }
 
+  //emiting msg to socket; which will then transmit it to corresponding toId (socketID)
+  sendMsg(message, toId = null, roomId = null) {
+    this.socket.emit("message", message, toId, roomId);
+  }
+
+  //handleOnTrack 
+  handleOnTrack(socketId, event){
+    if (this.streams[socketId]?.id !== event.streams[0].id) {
+      this.streams[socketId] = event.streams[0];
+
+      this._emit("newUser", {
+        socketId,
+        stream: event.streams[0],
+      });
+    }
+  }
+
+  connect(socketId) {
+    if(this.localStream){
+      //making an RTCPeerConnection object
+      this.createPeerConnection(socketId);
+      //adding our local stream to this peer connection
+      this.pc[socketId].addStream(this.localStream);
+      //create SDP offer
+      this.makeOffer(socketId);
+
+
+      //essentially what's happening is :
+      /*
+      createPeerConnection is init an RTCPeerConnection obj ; which is stored in a pc {peer connections} Array ; then a mediaStream is being added onto that PC object 
+      and then we are making SDP offer to our remote peer
+
+      createPeerConnection func abstracts away the creation and transfer of ICE cand via a signaling server 
+      and adding event listeners for receiving ice cand and receiving media streams from remote peer
+      */
+
+    }
+  }
 }
