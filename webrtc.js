@@ -18,7 +18,7 @@ class WebRTC extends EventTarget {
     this.pcConfig = pcConfig; // list of turn and stun servers
     //other field vars
     this.room;
-    //streams refer to audio or video data 
+    //streams refer to audio or video data
     this.streams = {};
     this.pc = {}; //peer connections
     this.localStream; //only one stream ; the video feed of a user
@@ -63,6 +63,16 @@ class WebRTC extends EventTarget {
     this.socket.emit("create or join", roomId);
   }
 
+  gotStream() {
+    if (this.room) {
+      this._sendMessage({ type: "gotstream" }, null, this.room);
+    } else {
+      this._emit("notification", {
+        notification: `Should join room before sending a stream.`,
+      });
+    }
+  }
+
   //leave current room
   leaveRoom() {
     if (!this.room) {
@@ -102,7 +112,7 @@ class WebRTC extends EventTarget {
       //to be defined : handleICe, handleOnTrack
       this.pc[socketId].onicecandidate = this.handleICE.bind(this, socketId); //call to handleIceCandidate func
       //adding tracks to be transferred
-      // onTrack is an event listener for the PC obj; when it's triggered it recevies an event obj which is then passed over to handleOnTrack 
+      // onTrack is an event listener for the PC obj; when it's triggered it recevies an event obj which is then passed over to handleOnTrack
       //this passing of event obj occurs implicitly ; so we don't need to explicitly pass that
       this.pc[socketId].onTrack = this.handleOnTrack.bind(this, socketId);
     } catch (error) {
@@ -132,8 +142,8 @@ class WebRTC extends EventTarget {
     this.socket.emit("message", message, toId, roomId);
   }
 
-  //handleOnTrack 
-  handleOnTrack(socketId, event){
+  //handleOnTrack
+  handleOnTrack(socketId, event) {
     if (this.streams[socketId]?.id !== event.streams[0].id) {
       this.streams[socketId] = event.streams[0];
 
@@ -145,14 +155,14 @@ class WebRTC extends EventTarget {
   }
 
   connect(socketId) {
-    if(this.localStream){
+    if (this.localStream) {
       //making an RTCPeerConnection object
       this.createPeerConnection(socketId);
       //adding our local stream to this peer connection
       this.pc[socketId].addStream(this.localStream);
       //create SDP offer
+      // makeOffer creates ice candidates which are to be sent over to remote peer ; which would be processed by handleICE func
       this.makeOffer(socketId);
-
 
       //essentially what's happening is :
       /*
@@ -162,7 +172,80 @@ class WebRTC extends EventTarget {
       createPeerConnection func abstracts away the creation and transfer of ICE cand via a signaling server 
       and adding event listeners for receiving ice cand and receiving media streams from remote peer
       */
-
+    } else {
+      return;
     }
+  }
+
+  //////////////////////////////
+  /*
+  init socket.io listeners
+  */
+  onSocketListeners() {
+    // Room was created by someone
+    this.socket.on("created", (room, socketId) => {
+      this._id = socketId;
+      this.room = room;
+      this.emit("createdRoom", { roomId: room });
+    });
+
+    // Join room
+    this.socket.on("join", (room) => {
+      this.room = room;
+      this.emit("joinedRoom", { roomId: room });
+    });
+
+    // Leave the room
+    this.socket.on("leave", (roomId) => {
+      this.room = null;
+      this.emit("leftRoom", { roomId: roomId });
+    });
+
+    //reacting to msgs received by socket
+    this.socket.on("message", (message, socketId) => {
+      //participant leaves
+      if (message.type === "leave") {
+        this.removeUser(socketId);
+        this.emit("userLeave", {
+          socketId: socketId,
+        });
+        return;
+      }
+
+      // Avoid dublicate connections
+      if (
+        this.pcs[socketId] &&
+        this.pcs[socketId].connectionState === "connected"
+      ) {
+        return;
+      }
+
+      switch (message.type) {
+        case "gotstream": // user is ready to share their stream
+          this.connect(socketId);
+          break;
+        case "offer": // got connection offer
+          if (!this.pcs[socketId]) {
+            this.connect(socketId);
+          }
+          this.pcs[socketId].setRemoteDescription(
+            new RTCSessionDescription(message)
+          );
+          this.answer(socketId);
+          break;
+        case "answer": // got answer for sent offer
+          this.pcs[socketId].setRemoteDescription(
+            new RTCSessionDescription(message)
+          );
+          break;
+        case "candidate": // received candidate sdp
+          const candidate = new RTCIceCandidate({
+            sdpMLineIndex: message.label,
+            candidate: message.candidate,
+          });
+          this.pcs[socketId].addIceCandidate(candidate);
+          break;
+      }
+    });
   }
 }
