@@ -1,3 +1,15 @@
+/*
+webrtc is an encapsulation of the webrtc implementation protocols; setting up remote connection with a peer; communicating via a signaling server; 
+sending ICE candidates; sedning SDP offers and setting local and remote SDP desc
+and relaying streams between the participants
+
+This class extends EventTarget 
+In the event listeners of HTML elem like Btns or video ; webRTC.method() will be called and webRTC.addEventListeners () will be listening to those events and will perform necessary actions
+
+therefore; we also need custom emitter inside the class to emit the events; since its EventTarget such an implementation is a necessity
+
+*/
+
 class WebRTC extends EventTarget{
     constructor(
         socket,
@@ -30,6 +42,6 @@ class WebRTC extends EventTarget{
         return this._id;
     }
 
-    
+
 
 }
