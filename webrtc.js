@@ -41,6 +41,7 @@ class WebRTC extends EventTarget {
   }
 
   //custom event emitter
+  // for socket listeners
   emit(eventname, details) {
     this.dispatchEvent(eventname, {
       detail: details,
@@ -69,6 +70,21 @@ class WebRTC extends EventTarget {
       return;
     }
     this.socket.emit("leave room", roomId);
+  }
+
+  //getLocal Stream ; this func is triggered from the UI btn ; asks for permission ; setups up the media devices and init the localstream to the received stream
+  //and returns it 
+  getLocalStream(audioContraints, videoConstraints) {
+    return navigator.mediaDevices
+      .getUserMedia({ audio: audioContraints, video: videoConstraints })
+      .then((strem) => {
+        this.localStream = stream;
+        return stream;
+      }).catch((err)=>{
+         this._emit("error", {
+           error: new Error(`Can't get usermedia`),
+         });
+      })
   }
 
   
