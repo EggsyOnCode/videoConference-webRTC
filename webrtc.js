@@ -87,5 +87,24 @@ class WebRTC extends EventTarget {
       })
   }
 
-  
+  //connection to peers
+  createPeerConnection(socketId){
+    try {
+        if(this.pc[socketId]){
+            console.log("connection already exists; skipping..");
+            return;
+        }
+        this.pc[socketId] = new RTCPeerConnection();
+        //after the connection obj is est we need to start sendning ICE candidates to the remote peer
+        this.pc[socketId].onicecandidate;
+    } catch (err) {
+        
+    }
+  }
+
+
+  connect(socketId){
+
+  }
+
 }
