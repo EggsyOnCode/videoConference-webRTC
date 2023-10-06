@@ -10,38 +10,66 @@ therefore; we also need custom emitter inside the class to emit the events; sinc
 
 */
 
-class WebRTC extends EventTarget{
-    constructor(
-        socket,
-        pcConfig = null
-    ){
-        super();
-        this.socket = socket;
-        this.pcConfig = pcConfig; // list of turn and stun servers
-        //other field vars
-        this.room;
-        this.pc = {}; //peer connections
-        this.localStream ; //only one stream ; the video feed of a user
-        this._id = null; //socket ID of the user 
+"use strict";
+class WebRTC extends EventTarget {
+  constructor(socket, pcConfig = null) {
+    super();
+    this.socket = socket;
+    this.pcConfig = pcConfig; // list of turn and stun servers
+    //other field vars
+    this.room;
+    this.pc = {}; //peer connections
+    this.localStream; //only one stream ; the video feed of a user
+    this._id = null; //socket ID of the user
 
-        //init socketListeners
-        this.onSocketListeners();
-    }
+    //init socketListeners
+    this.onSocketListeners();
+  }
 
-    //getters
-    get getRoom(){
-        return this.room; 
-    }
-    get getLocalStream(){
-        return this.localStream;
-    }
-    get getParticipants(){
-        return Object.keys(this.pcs)
-    }
-    get getId(){
-        return this._id;
-    }
+  //getters
+  get getRoom() {
+    return this.room;
+  }
+  get getLocalStream() {
+    return this.localStream;
+  }
+  get getParticipants() {
+    return Object.keys(this.pcs);
+  }
+  get getId() {
+    return this._id;
+  }
 
+  //custom event emitter
+  emit(eventname, details) {
+    this.dispatchEvent(eventname, {
+      detail: details,
+    });
+  }
 
+  //emitting events to socket listeners
 
+  //ROOMs
+  joinRoom(roomId) {
+    if (this.room) {
+      this.emit("notification", {
+        notification: "Leave current room to join another",
+      });
+      return;
+    }
+    this.socket.emit("create or join", roomId);
+  }
+
+  //leave current room
+  leaveRoom() {
+    if (!this.room) {
+      this.emit("notification", {
+        notification: "You are already not in a room",
+      });
+      return;
+    }
+    this.socket.emit("leave room", roomId);
+  }
+
+  
 }
